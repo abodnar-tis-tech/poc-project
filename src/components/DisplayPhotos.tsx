@@ -23,25 +23,33 @@ interface DisplayPhotosProps {
   refetchFlag: boolean;
 }
 
+type Image = {
+  name: string;
+  url: string;
+};
+
 export default function DisplayPhotos({ refetchFlag }: DisplayPhotosProps) {
-  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [imageUrls, setImageUrls] = useState<Image[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<Image | null>(null);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loadingAnalyzeImage, setLoadingAnalyzeImage] = useState(false);
   const toast = useToast();
 
-  const fetchAnalysis = async () => {
+  const analyzeImage = async () => {
     if (!selectedImage) return;
 
     try {
-      const res = await fetch("/api/analyzePhoto", {
+      setLoadingAnalyzeImage(true);
+      const res = await fetch("/api/open-ai-test", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          imageUrl: selectedImage,
+          imageUrl: selectedImage.url,
+          imageName: selectedImage.name,
         }),
       });
 
@@ -53,7 +61,7 @@ export default function DisplayPhotos({ refetchFlag }: DisplayPhotosProps) {
         throw new Error(data.error || "Failed to analyze the image.");
       }
     } catch (error) {
-      console.log("🚀 ~ fetchAnalysis ~ error:", error);
+      console.log("🚀 ~ analyzeImage ~ error:", error);
       toast({
         title: "Error analyzing image.",
         description: "There was an issue analyzing the image.",
@@ -61,43 +69,115 @@ export default function DisplayPhotos({ refetchFlag }: DisplayPhotosProps) {
         duration: 5000,
         isClosable: true,
       });
+    } finally {
+      setLoadingAnalyzeImage(false);
     }
   };
 
-  const handleImageClick = (url: string) => {
-    setSelectedImage(url);
-    setIsModalOpen(true);
-    setAnalysis(null);
+  const fetchAnalysis = async (name: string) => {
+    if (!selectedImage) return;
+
+    try {
+      const res = await fetch(
+        `/api/analysis?imageName=${encodeURIComponent(name)}`
+      );
+      const data = await res.json();
+
+      if (res.ok && data.analysisText) {
+        setAnalysis(data.analysisText);
+      } else {
+        setAnalysis(null);
+      }
+    } catch (error) {
+      console.log("🚀 ~ fetchAnalysis ~ error:", error);
+      toast({
+        title: "Error fetching analysis.",
+        description: "There was an issue retrieving the image analysis.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+      setAnalysis(null);
+    }
   };
 
-  useEffect(() => {
-    const fetchImages = async () => {
-      try {
-        const res = await fetch("/api/photos");
-        const data = await res.json();
+  const handleDeletePhoto = async (imageName?: string) => {
+    if (!imageName) return;
 
-        if (res.ok) {
-          setImageUrls(data.urls);
-        } else {
-          throw new Error(data.error || "Failed to load images.");
-        }
+    try {
+      const res = await fetch("/api/photo", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: imageName,
+        }),
+      });
 
-        setLoading(false);
-      } catch (error) {
-        console.log("🚀 ~ fetchImages ~ error:", error);
+      const data = await res.json();
+
+      if (res.ok) {
+        fetchImages();
+        setIsModalOpen(false);
         toast({
-          title: "Error loading images.",
-          description: "There was an issue loading the images from storage.",
-          status: "error",
+          title: "Image deleted.",
+          description: "The image was successfully deleted.",
+          status: "success",
           duration: 5000,
           isClosable: true,
         });
-        setLoading(false);
+      } else {
+        throw new Error(data.error || "Failed to delete the image.");
       }
-    };
+    } catch (error) {
+      console.log("🚀 ~ deleteImage ~ error:", error);
+      toast({
+        title: "Error deleting image.",
+        description: "There was an issue deleting the image.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
 
+  const handleImageClick = (image: Image) => {
+    setAnalysis(null);
+    setSelectedImage(image);
+    setIsModalOpen(true);
+    fetchAnalysis(image.name);
+  };
+
+  const fetchImages = async () => {
+    try {
+      const res = await fetch("/api/photo");
+      const data = await res.json();
+
+      if (res.ok) {
+        console.log(data);
+        setImageUrls(data.urls);
+      } else {
+        throw new Error(data.error || "Failed to load images.");
+      }
+
+      setLoading(false);
+    } catch (error) {
+      console.log("🚀 ~ fetchImages ~ error:", error);
+      toast({
+        title: "Error loading images.",
+        description: "There was an issue loading the images from storage.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchImages();
-  }, [refetchFlag, toast]);
+  }, [refetchFlag]);
 
   return (
     <VStack alignItems="center" spacing={6}>
@@ -126,17 +206,17 @@ export default function DisplayPhotos({ refetchFlag }: DisplayPhotosProps) {
           spacing={4}
           width="100%"
         >
-          {imageUrls.map((url, index) => (
+          {imageUrls.map((image, index) => (
             <Box
               key={index}
               overflow="hidden"
               display={"flex"}
-              onClick={() => handleImageClick(url)}
+              onClick={() => handleImageClick(image)}
               cursor="pointer"
               justifyContent={"center"}
             >
               <Image
-                src={url}
+                src={image.url}
                 alt={`Uploaded image ${index + 1}`}
                 objectFit="cover"
                 boxSize="300px"
@@ -157,7 +237,11 @@ export default function DisplayPhotos({ refetchFlag }: DisplayPhotosProps) {
           <ModalCloseButton />
           <ModalBody>
             {selectedImage && (
-              <Image src={selectedImage} alt="Selected Image" width="100%" />
+              <Image
+                src={selectedImage.url}
+                alt="Selected Image"
+                width="100%"
+              />
             )}
             {analysis && (
               <Text mt={4}>
@@ -166,19 +250,22 @@ export default function DisplayPhotos({ refetchFlag }: DisplayPhotosProps) {
             )}
           </ModalBody>
           <ModalFooter>
+            {!analysis && (
+              <Button
+                colorScheme="blue"
+                onClick={analyzeImage}
+                isDisabled={!selectedImage}
+                isLoading={loadingAnalyzeImage}
+              >
+                {loadingAnalyzeImage ? "Analyzing ..." : "Analyze Image"}
+              </Button>
+            )}
             <Button
-              colorScheme="blue"
-              onClick={fetchAnalysis}
-              isDisabled={!selectedImage}
-            >
-              Analyze Image
-            </Button>
-            <Button
-              variant="ghost"
+              colorScheme="red"
               ml={3}
-              onClick={() => setIsModalOpen(false)}
+              onClick={() => handleDeletePhoto(selectedImage?.name)}
             >
-              Close
+              Delete
             </Button>
           </ModalFooter>
         </ModalContent>

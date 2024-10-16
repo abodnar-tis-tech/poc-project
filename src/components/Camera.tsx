@@ -78,7 +78,7 @@ export default function Camera({ onUploadComplete }: CameraProps) {
     const fileName = `photo-${Date.now()}.jpg`;
 
     try {
-      const res = await fetch("/api/uploadPhoto", {
+      const res = await fetch("/api/photo", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

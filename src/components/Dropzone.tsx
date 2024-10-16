@@ -10,6 +10,7 @@ import {
   Image,
   useToast,
 } from "@chakra-ui/react";
+import { v4 as uuidv4 } from "uuid";
 
 interface DropzoneProps {
   onUploadComplete: () => void;
@@ -40,8 +41,8 @@ export default function Dropzone({ onUploadComplete }: DropzoneProps) {
       const base64File = (reader.result as string).split(",")[1];
 
       try {
-        const fileName = `${selectedFile.name}-${Date.now()}`;
-        const res = await fetch("/api/uploadPhoto", {
+        const fileName = uuidv4();
+        const res = await fetch("/api/photo", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -62,6 +63,8 @@ export default function Dropzone({ onUploadComplete }: DropzoneProps) {
             isClosable: true,
           });
           onUploadComplete();
+          setSelectedFile(null);
+          setImagePreview("");
         } else {
           throw new Error("Upload failed");
         }
