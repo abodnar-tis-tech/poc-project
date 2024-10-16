@@ -29,7 +29,7 @@ export default function Camera({ onUploadComplete }: CameraProps) {
   const handleStartCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
+        video: { facingMode: { ideal: "environment" } },
       });
       setStream(mediaStream);
       setIsCameraActive(true);
