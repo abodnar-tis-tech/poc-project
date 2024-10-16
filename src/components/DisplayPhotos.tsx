@@ -7,8 +7,16 @@ import {
   Image,
   Text,
   VStack,
-  Spinner,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton,
+  Button,
   useToast,
+  Skeleton,
 } from "@chakra-ui/react";
 
 interface DisplayPhotosProps {
@@ -18,7 +26,49 @@ interface DisplayPhotosProps {
 export default function DisplayPhotos({ refetchFlag }: DisplayPhotosProps) {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const toast = useToast();
+
+  const fetchAnalysis = async () => {
+    if (!selectedImage) return;
+
+    try {
+      const res = await fetch("/api/analyzePhoto", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageUrl: selectedImage,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setAnalysis(data.description);
+      } else {
+        throw new Error(data.error || "Failed to analyze the image.");
+      }
+    } catch (error) {
+      console.log("🚀 ~ fetchAnalysis ~ error:", error);
+      toast({
+        title: "Error analyzing image.",
+        description: "There was an issue analyzing the image.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleImageClick = (url: string) => {
+    setSelectedImage(url);
+    setIsModalOpen(true);
+    setAnalysis(null);
+  };
 
   useEffect(() => {
     const fetchImages = async () => {
@@ -56,7 +106,20 @@ export default function DisplayPhotos({ refetchFlag }: DisplayPhotosProps) {
       </Text>
 
       {loading ? (
-        <Spinner size="xl" />
+        <SimpleGrid
+          columns={{ base: 1, md: 2, lg: 4 }}
+          spacing={4}
+          width="100%"
+        >
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton
+              key={index}
+              height="300px"
+              width="300px"
+              borderRadius="lg"
+            />
+          ))}
+        </SimpleGrid>
       ) : (
         <SimpleGrid
           columns={{ base: 1, md: 2, lg: 4 }}
@@ -68,6 +131,8 @@ export default function DisplayPhotos({ refetchFlag }: DisplayPhotosProps) {
               key={index}
               overflow="hidden"
               display={"flex"}
+              onClick={() => handleImageClick(url)}
+              cursor="pointer"
               justifyContent={"center"}
             >
               <Image
@@ -80,6 +145,44 @@ export default function DisplayPhotos({ refetchFlag }: DisplayPhotosProps) {
           ))}
         </SimpleGrid>
       )}
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        size="lg"
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Image Analysis</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            {selectedImage && (
+              <Image src={selectedImage} alt="Selected Image" width="100%" />
+            )}
+            {analysis && (
+              <Text mt={4}>
+                <strong>Analysis:</strong> {analysis}
+              </Text>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              colorScheme="blue"
+              onClick={fetchAnalysis}
+              isDisabled={!selectedImage}
+            >
+              Analyze Image
+            </Button>
+            <Button
+              variant="ghost"
+              ml={3}
+              onClick={() => setIsModalOpen(false)}
+            >
+              Close
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </VStack>
   );
 }
